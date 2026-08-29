@@ -1,0 +1,48 @@
+[project]
+name = "externaldns-verizon-webhook"
+description = "ExternalDNS webhook provider for Verizon Fios routers"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+authors = [{ name = "ci-sourcerer" }]
+dynamic = ["version"]
+dependencies = [
+    "Flask>=2.0",
+    "asgiref>=3.7",
+    "uvicorn>=0.27",
+    "verizon-router-client>=0.1",
+]
+
+[project.scripts]
+externaldns-verizon-webhook = "externaldns_verizon_webhook.app:main"
+
+[dependency-groups]
+dev = [
+    "common-python-tasks==0.10.2",
+]
+
+[tool.poe]
+include_script = "common_python_tasks:tasks(exclude_tags=['fastapi'])"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/externaldns_verizon_webhook"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/externaldns_verizon_webhook", "README.md"]
+
+[tool.uv-dynamic-versioning]
+style = "pep440"
+dirty = true
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["hatchling>=1.27.0", "uv-dynamic-versioning>=0.14.0"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

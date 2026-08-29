@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""ExternalDNS Webhook Provider for Verizon Fios Router (CR1000A/CR1000B).
+"""ExternalDNS webhook provider for Verizon Fios Router (CR1000A/CR1000B).
 
 This service implements the ExternalDNS webhook provider API and translates
 ExternalDNS record operations into DNS entries managed by a Verizon Fios router
@@ -11,8 +11,8 @@ import argparse
 import functools
 import logging
 import os
-from getpass import getpass
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import uvicorn
 from asgiref.wsgi import WsgiToAsgi
@@ -77,7 +77,7 @@ def _ensure_suffix(name: str, suffix: str) -> str:
 
 
 def _normalize_dns_suffix(suffix: str) -> str:
-    return f".{suffix.strip().strip(".")}"
+    return f".{suffix.strip().strip('.')}"
 
 
 def _normalize_domain_filter(value: str) -> str:
@@ -270,25 +270,35 @@ def apply_records() -> Response:
         len(update_new),
     )
 
-    provider = cast(VerizonExternalDNS, current_app.config["VERIZON_PROVIDER"])
+    config = current_app.config
+    provider = cast(VerizonExternalDNS, config["VERIZON_PROVIDER"])
+    delete_names = []
+    create_updates = []
 
     try:
         for rec in delete:
-            dns_name = rec.get("dnsName")
-            if dns_name:
-                provider.delete_record(dns_name)
+            dns_name = rec.get("dnsName") if isinstance(rec, dict) else None
+            if isinstance(dns_name, str):
+                delete_names.append(dns_name)
 
         for rec in update_old:
-            dns_name = rec.get("dnsName")
-            if dns_name:
-                provider.delete_record(dns_name)
+            dns_name = rec.get("dnsName") if isinstance(rec, dict) else None
+            if isinstance(dns_name, str):
+                delete_names.append(dns_name)
 
         for rec in create + update_new:
+            if not isinstance(rec, dict):
+                continue
             dns_name = rec.get("dnsName")
             targets = rec.get("targets") or []
-            if not dns_name or not targets:
-                continue
-            provider.create_record(dns_name, targets[0])
+            if isinstance(dns_name, str) and isinstance(targets, list) and targets:
+                create_updates.append((dns_name, targets[0]))
+
+        for dns_name in delete_names:
+            provider.delete_record(dns_name)
+
+        for dns_name, target in create_updates:
+            provider.create_record(dns_name, target)
     except Exception as e:
         LOGGER.exception("Failed to apply record changes")
         abort(make_response(str(e), 500))
@@ -323,7 +333,8 @@ def adjust_records() -> Response:
 
 app = WsgiToAsgi(flask_app)
 
-if __name__ == "__main__":
+
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="ExternalDNS Webhook Provider for Verizon Fios Router"
     )
@@ -438,9 +449,8 @@ if __name__ == "__main__":
     flask_app.config["VERIZON_DNS_SUFFIX"] = dns_suffix
     flask_app.config["VERIZON_DOMAIN_FILTERS"] = domain_filters
 
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="debug" if debug else "info",
-    )
+    uvicorn.run(app, host=host, port=port, log_level="debug" if debug else "info")
+
+
+if __name__ == "__main__":
+    main()
